@@ -6,7 +6,7 @@ A containerised background service that scans a folder for media files, transcri
 
 ## Project Goal
 
-Automatically generate English subtitle files for a media library running on a low-power NUC box. The service runs quietly in the background, processing files at its own pace without impacting other running services.
+Automatically generate English subtitle files for a media library running on a low-power device. The service runs quietly in the background, processing files at its own pace without impacting other running services.
 
 ---
 
@@ -33,7 +33,8 @@ Write .srt file alongside source media
 | Container | Docker via VS Code Dev Container | Clean dependencies, good learning environment |
 | Audio extraction | ffmpeg | Industry standard |
 | Transcription + Translation | OpenAI Whisper | Local, offline, handles both steps in one pass |
-| Whisper model | `medium` (default, configurable) | Best fit for available RAM (~5GB usage) |
+| Device support | CPU and GPU (CUDA), auto-detected | Fast iteration during development, low-power deployment on target hardware |
+| Whisper model | `medium` (default, configurable) | Best fit for available RAM on target hardware (~5GB usage) |
 | Target language | English only | Whisper's translate mode covers all source languages |
 | Output format | `.srt` | Standard subtitle format, named to match source file |
 | Skip logic | Skip if matching `.srt` already exists | Avoids reprocessing on reruns |
@@ -42,9 +43,20 @@ Write .srt file alongside source media
 
 ---
 
+## Development Environment
+
+Development happens on a separate machine from the deployment target:
+
+**Dev machine:** Windows 11, x86_64, NVIDIA GPU (CUDA-capable)
+**Target/deployment machine:** Low-power mini PC (CPU-only, see Hardware section below)
+
+The project is designed to run on both — Whisper will use CUDA if available and fall back to CPU automatically. This lets development iterate faster (larger models, quicker transcription) while the deployed service on the mini PC runs CPU-only within its resource budget.
+
+---
+
 ## Hardware
 
-**Device:** GeekomMiniPC NucBox M5 Plus
+**Target device:** Low-power mini PC (e.g. Intel NUC or similar)
 **CPU:** AMD Ryzen 7 5825U (8 cores / 16 threads)
 **RAM:** 32GB (approx. 14GB free for this service)
 **Storage:** 512GB SSD
@@ -128,7 +140,7 @@ srt_generator/
 ### Stage 9 — Production Packaging
 - Write production Dockerfile
 - Clean build from scratch
-- Deploy to NUC
+- Deploy to target device
 
 ### Stage 10 — Real World Testing
 - Test with actual media library
