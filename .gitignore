@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Whisper models (large, downloaded automatically)
+*.pt
+
+# Media files and generated subtitles (test data)
+input/*
+output/*
+!input/.gitkeep
+!output/.gitkeep
+
+# OS/editor cruft
+.DS_Store
+.vscode/
