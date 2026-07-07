@@ -1,0 +1,17 @@
+{
+    "name": "srt_generator",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {"BUILD_TARGET": "cpu"}
+    },
+    "runArgs": ["--gpus", "all"],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+            ]
+        }
+    }
+
+}
