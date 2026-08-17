@@ -1,1 +1,1 @@
-MEDIA_TYPES = set("avi", "mp4", "mkv")
+MEDIA_TYPES = set(["avi", "mp4", "mkv"])

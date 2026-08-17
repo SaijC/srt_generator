@@ -17,5 +17,6 @@
                 "ms-python.vscode-pylance"
             ]
         }
-    }
+    },
+    "mounts": ["source=d:/projects/movies,target=/input,type=bind"]
 }
