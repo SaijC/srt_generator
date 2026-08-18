@@ -10,8 +10,8 @@ Update this at the end of each session.
 | Stage | Description | Status |
 |---|---|---|
 | 1 | Project setup & dev container | ✅ Complete |
-| 2 | Folder scanner | ⬜ Next |
-| 3 | Audio extraction | ⬜ |
+| 2 | Folder scanner | ✅ Complete |
+| 3 | Audio extraction | ⬜ Next |
 | 4 | Whisper integration | ⬜ |
 | 5 | SRT writer | ⬜ |
 | 6 | Pipeline wiring | ⬜ |
@@ -147,26 +147,130 @@ OpenAI ships Whisper as date-stamped releases rather than semver.
 
 ---
 
-## Stage 2 — Folder Scanner ⬜
+## Stage 2 — Folder Scanner ✅
+
+**Completed:** 18 August 2026
 
 **Goal:** scan a folder for media files, log what it finds, handle the
 edge cases.
 
-### To think about before writing
+### What was built
 
-- Which extensions count as media? (`.mp4`, `.mkv`, `.avi`, `.mov`, ...)
-  Where should that list live so Stage 8 can make it configurable?
-- Recursive into subfolders, or top level only?
-- Case sensitivity — `.MP4` vs `.mp4`. Linux filesystems care.
-- Edge cases: folder empty, folder doesn't exist, no media files present,
-  files present but unreadable.
-- `os.listdir` vs `os.walk` vs `pathlib.Path.glob` — worth understanding
-  the difference rather than picking the first one found.
+`src/media_collector.py` — a `MediaCollector` class:
 
-### Definition of done
+```python
+class MediaCollector:
+    def __init__(self):
+        self.media_files = []
 
-Point it at `input/`, get an accurate list of media files logged, and
-have it fail gracefully on every edge case above.
+    def collect_media_files(self, directory):
+        self.media_files.clear()
+
+        if not os.path.isdir(directory):
+            logging.error(f"{directory} does not exist or is not a directory.")
+            return
+
+        for root, _, files in os.walk(
+            directory,
+            onerror=lambda e: logging.error(f"Error accessing {e.filename}: {e.strerror}")
+        ):
+            for file in files:
+                file_extension = pathlib.Path(file).suffix
+                if not file_extension:
+                    continue
+                if file_extension.lower() not in MEDIA_TYPES:
+                    continue
+                file_path = os.path.join(root, file)
+                self.media_files.append(file_path)
+
+    @property
+    def get_media_files(self):
+        return self.media_files
+```
+
+- Recursive scan via `os.walk`, extension match case-insensitive against
+  `MEDIA_TYPES` (`src/const.py` — `{".avi", ".mp4", ".mkv"}`, pulled out
+  so Stage 8 can make it configurable)
+- Missing directory / not-a-directory → `logging.error`, early return,
+  via a single `os.path.isdir` check
+- Unreadable directory mid-walk → handled via `os.walk`'s `onerror`
+  callback, logged with the offending path and reason, walk continues
+- `__main__` block points at `/input` (the real devcontainer mount) and
+  prints a numbered list, or logs "No media files found."
+
+### Verified working
+
+Ran against the real mounted library (`/input` → `d:/projects/movies`)
+via `python -m src.media_collector` — correctly walked into nested
+subfolders (e.g. `Beverly Hills Cop/`, `Sinners (2025)/`) and returned
+only `.avi`/`.mp4`/`.mkv` files, numbered and printed.
+
+### Lessons learned
+
+**1. Relative imports need `-m`, not direct execution**
+
+`media_collector.py` has `from .const import MEDIA_TYPES` — a relative
+import, which only resolves when Python knows the file is part of the
+`src` package. `python src/media_collector.py` fails with
+`attempted relative import with no known parent package`; the fix is
+`python -m src.media_collector` run from the project root, which is what
+makes `src/__init__.py` matter.
+
+**2. `os.walk` fails silently by default**
+
+Both a nonexistent starting directory and an unreadable subdirectory
+mid-walk produce *no exception* unless you opt in: check `os.path.exists`
+before walking, and pass an `onerror` callback (invoked with the
+`OSError`, exposing `.filename` and `.strerror`) to catch read failures
+without aborting the whole scan.
+
+**3. `str.rsplit('.', 1)[-1]` on an extensionless filename doesn't fail**
+
+A filename with no dot at all (e.g. `README`) still returns the whole
+filename from `rsplit` — there's nothing to split on. It falls through to
+the `MEDIA_TYPES` check and gets excluded there instead, which is a
+different code path than the explicit `if not file_extension` guard added
+for filenames *ending* in a dot (e.g. `"file."` → `""`). Both are handled,
+just via two different mechanisms — worth knowing which is doing what.
+(Superseded by lesson 5 below — extension parsing later moved to
+`pathlib.Path.suffix`, which changes this behaviour slightly since
+`.suffix` on an extensionless name returns `""` directly rather than the
+whole filename.)
+
+**4. `logging` vs. `print` split: diagnostics vs. output**
+
+Errors (missing/unreadable directory) go through `logging.error`;
+`__main__`'s actual result reporting (the numbered file list) stays on
+`print`. Diagnostics vs. requested output being different channels is a
+reasonable split, not an inconsistency.
+
+**5. `pathlib.Path.suffix` includes the leading dot — `rsplit` doesn't**
+
+Switching extension parsing from `file.rsplit('.', 1)[-1]` to
+`pathlib.Path(file).suffix` looks like a pure readability swap but isn't:
+`Path("movie.mp4").suffix` returns `".mp4"`, dot included, while the old
+`rsplit` approach returned `"mp4"`. `MEDIA_TYPES` was written for the
+dot-less form, so after the switch every real file silently failed the
+`in MEDIA_TYPES` check — the scanner ran without error and just reported
+zero files found. Fixed by updating `MEDIA_TYPES` in `const.py` to
+`{".avi", ".mp4", ".mkv"}` to match what `.suffix` actually returns.
+Caught by re-running against the real `/input` library rather than
+trusting the code by inspection — a good example of why the "run it and
+see" step in the Learning Approach matters even for a change that looks
+harmless.
+
+**6. `os.path.isdir()` subsumes `os.path.exists()`**
+
+`isdir()` returns `False` for a path that doesn't exist at all, not just
+for one that exists but isn't a directory. `os.path.exists(directory) or
+not os.path.isdir(directory)`-style double checks are redundant — a
+single `isdir()` check covers both cases.
+
+### Open items carried forward
+
+| Item | Notes | When |
+|---|---|---|
+| `onerror` path untested | Hard to trigger a real permissions error inside a container running as root — logic reviewed but not exercised end to end. | Revisit if it matters later |
 
 ---
 
@@ -175,3 +279,7 @@ have it fail gracefully on every edge case above.
 | Date | Covered |
 |---|---|
 | 16 Aug 2026 | Stage 1 complete — Dockerfile, requirements, container verified |
+| 17 Aug 2026 | Stage 2 started (WIP, off-record) — `MediaCollector` class scanning with `os.walk`, `MEDIA_TYPES` extracted to `const.py` |
+| 18 Aug 2026 | Reviewed WIP Stage 2 code, brought PROGRESS.md up to date with what's actually in the repo |
+| 18 Aug 2026 | Stage 2 complete — added missing-directory and unreadable-directory handling, switched to `logging`, fixed `/input` mount path, verified against real media library |
+| 18 Aug 2026 | Post-completion cleanup — switched extension parsing to `pathlib.Path.suffix`, caught and fixed the dot-prefix mismatch this introduced in `MEDIA_TYPES`, collapsed redundant `exists`/`isdir` check |
